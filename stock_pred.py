@@ -3,28 +3,40 @@ import numpy as np
 import matplotlib.pyplot as plt
 from sklearn.linear_model import LinearRegression
 from datetime import datetime, timedelta
+import requests
+import os
+import wget
 
 # 读取CSV文件
-comp = "NVDA"
-data = pd.read_csv(f'{comp}.csv')  # 将文件名替换为你的CSV文件名
+comp = "AMD"
+url = f"https://query1.finance.yahoo.com/v7/finance/download/{comp}?period1=916963200&period2=1694304000&interval=1d&events=history&includeAdjustedClose=true"
+wget.download(url, "temp.csv")
+print(f"Downloaded {comp} Stock Data.")
+
+# 读取数据并删除包含NaN的行
+data = pd.read_csv('temp.csv')  # 将文件名替换为你的CSV文件名
 data['Date'] = pd.to_datetime(data['Date'])
 data.set_index('Date', inplace=True)
+data.dropna(axis=0, inplace=True)  # 删除包含NaN的行
 
 # 仅保留2020年到2024年的数据
-start_date = datetime(1980, 3, 17)
+start_date = datetime(1950, 1, 1)
 end_date = datetime(2024, 12, 31)
 data = data[(data.index >= start_date) & (data.index <= end_date)]
 
-# 不同的 look_back_days 值
-look_back_days_values = [1, 10, 20, 30, 40, 50, 60, 70, 80, 90, 100, 200, 300, 400, 500, 600, 700, 800, 900, 1000, 2000, 3000]
-# look_back_days_values = list(range(1, 6001))
+# 计算总行数并根据总行数生成 look_back_days_values
+total_rows = len(data)
+look_back_step = 1000
+look_back_max = total_rows // 1000 * 1000
+
+look_back_days_values = list(range(1000, look_back_max + 1, look_back_step))
 
 # 预测未来一段时间的走势并绘制在同一个窗口中
-forecast_days = 365
+forecast_days = 365*2
 forecast_dates = [data.index[-1] + timedelta(days=i) for i in range(1, forecast_days + 1)]
 
-num_rows = 5
-num_cols = 6
+num_rows = 3
+num_cols = 4
 num_subplots = num_rows * num_cols
 
 # 创建第一个视窗
@@ -67,14 +79,18 @@ for idx, look_back_days in enumerate(look_back_days_values):
 
 plt.subplots_adjust(hspace=0.5)
 
-# 显示第一个视窗，但不阻塞程序
-plt.show(block=False)
-
-# 创建第二个视窗并显示
+# 创建第二个视窗
 fig2, ax2 = plt.subplots(figsize=(10, 6))
+
 # 计算平均值并绘制
 average_predicted_prices = np.mean(np.array([ax.lines[line_idx * 2 + 1].get_ydata() for line_idx in range(len(look_back_days_values)) if len(ax.lines) > line_idx * 2 + 1]), axis=0)
-ax2.plot(forecast_dates, average_predicted_prices, label='Average Predicted Price', linestyle='dashed', color='orange')
+
+# 绘制前一年的数据（蓝色实线）
+one_year_ago = data.index[-forecast_days:]
+one_year_ago_prices = data['Close'][-forecast_days:]
+
+ax2.plot(one_year_ago, one_year_ago_prices, label='One Year Ago', linestyle='solid')
+ax2.plot(forecast_dates, average_predicted_prices, label='Average Predicted Price', linestyle='dashed')
 ax2.set_xlabel('Date')
 ax2.set_ylabel('Price(USD)')
 ax2.set_title(f'Average {comp} Stock Prediction')
@@ -82,3 +98,4 @@ ax2.legend()
 
 # 显示第二个视窗
 plt.show()
+os.remove("temp.csv")
